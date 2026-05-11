@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "UI Dropper",
+  "description": "Click page elements to detach and drop them with physics-based gravity.",
+  "version": "0.1.0",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "toggle-page-dropper": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Toggle Page Dropper"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
