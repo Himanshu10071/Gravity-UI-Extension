@@ -1,3 +1,5 @@
+![Page Dropper preview](images/image.png)
+
 # Page Dropper (Gravity UI)
 
 A Chrome extension that lets you click any page element and make it detach and fall with real physics (Matter.js). Elements are cloned into an overlay, the original is replaced by an invisible placeholder to keep layout stable, and the clone drops, collides, and stacks at the bottom of the page.

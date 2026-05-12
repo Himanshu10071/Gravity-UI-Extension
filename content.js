@@ -13,8 +13,6 @@
 	const HOVER_CLASS = "pd-hovered";
 	const PLACEHOLDER_CLASS = "pd-placeholder";
 	const TOAST_CLASS = "pd-toast";
-	const LOG_PREFIX = "[Page Dropper]";
-	const DEBUG = true;
 
 	const state = {
 		enabled: false,
@@ -31,36 +29,6 @@
 		syncHandle: null,
 		syncRunning: false
 	};
-
-	function log(...args) {
-		if (DEBUG) {
-			console.log(LOG_PREFIX, ...args);
-		}
-	}
-
-	function warn(...args) {
-		if (DEBUG) {
-			console.warn(LOG_PREFIX, ...args);
-		}
-	}
-
-	function describeElement(element) {
-		if (!element) {
-			return "(none)";
-		}
-
-		const tag = element.tagName ? element.tagName.toLowerCase() : "unknown";
-		const id = element.id ? `#${element.id}` : "";
-		const classes = element.classList
-			? Array.from(element.classList)
-					.slice(0, 2)
-					.map((name) => `.${name}`)
-					.join("")
-			: "";
-		return `${tag}${id}${classes}`;
-	}
-
-	log("Content script loaded", window.location.href);
 
 	function isDroppable(element) {
 		if (!element || !(element instanceof Element)) {
@@ -89,7 +57,6 @@
 		overlay.style.display = "none";
 		document.documentElement.appendChild(overlay);
 		state.overlay = overlay;
-		log("Overlay created");
 	}
 
 	function ensureDropLayer() {
@@ -102,7 +69,6 @@
 		layer.setAttribute(DATA_ATTR, "layer");
 		document.documentElement.appendChild(layer);
 		state.dropLayer = layer;
-		log("Drop layer created");
 	}
 
 	function updateOverlay(target) {
@@ -199,6 +165,27 @@
 		}, 1600);
 	}
 
+	function copyComputedStyles(source, target) {
+		const computed = getComputedStyle(source);
+		for (const prop of computed) {
+			target.style.setProperty(
+				prop,
+				computed.getPropertyValue(prop),
+				computed.getPropertyPriority(prop)
+			);
+		}
+	}
+
+	function copyComputedTree(source, target) {
+		copyComputedStyles(source, target);
+		const sourceNodes = source.querySelectorAll("*");
+		const targetNodes = target.querySelectorAll("*");
+		const count = Math.min(sourceNodes.length, targetNodes.length);
+		for (let i = 0; i < count; i += 1) {
+			copyComputedStyles(sourceNodes[i], targetNodes[i]);
+		}
+	}
+
 	function getDocumentSize() {
 		const root = document.documentElement;
 		const body = document.body;
@@ -265,7 +252,6 @@
 
 		state.bounds = [floor, leftWall, rightWall];
 		Composite.add(state.engine.world, state.bounds);
-		log("Bounds rebuilt", { width, height, docWidth, docHeight });
 	}
 
 	function ensurePhysics() {
@@ -274,7 +260,6 @@
 		}
 
 		if (typeof Matter === "undefined") {
-			warn("Matter.js not available");
 			return;
 		}
 
@@ -284,17 +269,14 @@
 
 		state.engine = engine;
 		state.runner = Runner.create();
-		log("Physics engine created");
 
 		rebuildBounds();
 		Runner.run(state.runner, engine);
-		log("Physics runner started");
 		startSyncLoop();
 
 		if (!state.resizeHandler) {
 			state.resizeHandler = () => rebuildBounds();
 			window.addEventListener("resize", state.resizeHandler);
-			log("Resize handler attached");
 		}
 	}
 
@@ -328,14 +310,8 @@
 		const pageLeft = rect.left + scrollX;
 		const pageTop = rect.top + scrollY;
 		if (rect.width < 2 || rect.height < 2) {
-			log("Drop skipped (too small)", describeElement(target));
 			return;
 		}
-
-		log("Dropping element", describeElement(target), {
-			width: rect.width,
-			height: rect.height
-		});
 
 		target.classList.remove(HOVER_CLASS);
 
@@ -343,6 +319,7 @@
 		clone.removeAttribute("id");
 		clone.setAttribute(DATA_ATTR, "dropped");
 		clone.classList.add("pd-dropped");
+		copyComputedTree(target, clone);
 		clone.style.width = `${rect.width}px`;
 		clone.style.height = `${rect.height}px`;
 		clone.style.margin = "0";
@@ -351,6 +328,7 @@
 		clone.style.transform = "translate(0px, 0px)";
 		clone.style.display = computed.display === "inline" ? "inline-block" : computed.display;
 		clone.style.boxSizing = "border-box";
+		clone.style.position = "fixed";
 
 		const placeholder = document.createElement("div");
 		placeholder.className = PLACEHOLDER_CLASS;
@@ -378,7 +356,6 @@
 
 		ensureDropLayer();
 		state.dropLayer.appendChild(clone);
-		log("Clone appended and original removed");
 		rebuildBounds();
 
 		const { Bodies, Composite } = Matter;
@@ -403,7 +380,6 @@
 			originTop: rect.top
 		});
 		Composite.add(state.engine.world, body);
-		log("Physics body added", { items: state.items.size });
 	}
 
 	function handleMove(event) {
@@ -413,15 +389,8 @@
 
 		const target = document.elementFromPoint(event.clientX, event.clientY);
 		if (!isDroppable(target)) {
-			if (state.hovered) {
-				log("Hover cleared", describeElement(state.hovered));
-			}
 			clearOverlay();
 			return;
-		}
-
-		if (target !== state.hovered) {
-			log("Hover target", describeElement(target));
 		}
 		setHoverTarget(target);
 		updateOverlay(target);
@@ -434,12 +403,10 @@
 
 		const target = document.elementFromPoint(event.clientX, event.clientY);
 		if (!isDroppable(target)) {
-			log("Click ignored (not droppable)");
 			return;
 		}
 
 		setHoverTarget(target);
-		log("Click drop", describeElement(target));
 
 		event.preventDefault();
 		event.stopImmediatePropagation();
@@ -457,7 +424,6 @@
 		ensurePhysics();
 		document.addEventListener("mousemove", handleMove, true);
 		document.addEventListener("click", handleClick, true);
-		log("Extension enabled");
 		showToast("Extension Enabled", "on");
 	}
 
@@ -470,12 +436,10 @@
 		clearOverlay();
 		document.removeEventListener("mousemove", handleMove, true);
 		document.removeEventListener("click", handleClick, true);
-		log("Extension disabled");
 		showToast("Extension Disabled", "off");
 	}
 
 	function toggle() {
-		log("Toggle requested", { enabled: state.enabled });
 		if (state.enabled) {
 			disable();
 		} else {
@@ -490,7 +454,6 @@
 
 	chrome.runtime.onMessage.addListener((message) => {
 		if (message && message.type === MESSAGE_TYPE) {
-			log("Toggle message received");
 			toggle();
 		}
 	});
